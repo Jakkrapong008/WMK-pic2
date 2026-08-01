@@ -129,7 +129,7 @@
                         <label class="text-sm font-medium text-gray-800">ระยะเวลาถ่ายติดกัน (วินาที)</label>
                         <span id="timeValDisplay" class="text-sm text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded">5 วินาที</span>
                     </div>
-                    <input type="range" id="timeThresholdInput" min="1" max="60" value="5" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    <input type="range" id="timeThresholdInput" min="1" max="120" value="5" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600">
                     <p class="text-xs text-gray-500 mt-1.5">ภาพที่ถ่ายห่างกันไม่เกินเวลานี้ จะถูกนำมาเทียบกัน</p>
                 </div>
                 <div class="flex-1">
@@ -437,15 +437,16 @@
                 if (currentGroup.length === 0) {
                     currentGroup.push(img);
                 } else {
-                    const lastImg = currentGroup[currentGroup.length - 1];
-                    const timeDiff = Math.abs(img.time - lastImg.time);
-                    const hDist = hammingDistance(img.hash, lastImg.hash);
+                    // เปลี่ยนมาเทียบกับภาพแรกของกลุ่มเสมอ เพื่อให้เวลาไม่ไหล (No Time Drift)
+                    const baseImg = currentGroup[0];
+                    const timeDiff = Math.abs(img.time - baseImg.time);
+                    const hDist = hammingDistance(img.hash, baseImg.hash);
                     
-                    // ถ่ายติดๆกัน และมุมคล้ายกัน
+                    // ถ่ายอยู่ในกรอบเวลาที่ตั้งไว้ และมุมคล้ายกัน
                     if (timeDiff <= TIME_THRESHOLD && hDist <= HASH_THRESHOLD) {
                         currentGroup.push(img);
                     } else {
-                        // ไม่เหมือนแล้ว ดันกลุ่มเก่าเก็บ แล้วสร้างกลุ่มใหม่
+                        // เกินกรอบเวลา หรือภาพต่างกันเกินไป ให้ตัดขึ้นกลุ่มใหม่
                         imageGroups.push([...currentGroup]);
                         currentGroup = [img];
                     }
