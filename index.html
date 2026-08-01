@@ -122,24 +122,35 @@
                 </div>
             </div>
 
-            <!-- Container for Image Groups -->
-            <div id="imageGroupsContainer" class="flex flex-col gap-8 mt-2">
-                <!-- Groups will be injected here via JS -->
+            <!-- Settings Sliders -->
+            <div class="bg-blue-50 p-5 rounded-xl border border-blue-100 flex flex-col md:flex-row gap-6 mt-2">
+                <div class="flex-1">
+                    <div class="flex justify-between mb-2">
+                        <label class="text-sm font-medium text-gray-800">ระยะเวลาถ่ายติดกัน (วินาที)</label>
+                        <span id="timeValDisplay" class="text-sm text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded">5 วินาที</span>
+                    </div>
+                    <input type="range" id="timeThresholdInput" min="1" max="60" value="5" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    <p class="text-xs text-gray-500 mt-1.5">ภาพที่ถ่ายห่างกันไม่เกินเวลานี้ จะถูกนำมาเทียบกัน</p>
+                </div>
+                <div class="flex-1">
+                    <div class="flex justify-between mb-2">
+                        <label class="text-sm font-medium text-gray-800">ระดับความต่างของภาพ</label>
+                        <span id="hashValDisplay" class="text-sm text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded">ระดับ 12</span>
+                    </div>
+                    <input type="range" id="hashThresholdInput" min="5" max="30" value="12" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    <p class="text-xs text-gray-500 mt-1.5">ปรับเพิ่มขึ้น (ไปทางขวา) ถ้าระบบแยกกลุ่มภาพเยอะเกินไป</p>
+                </div>
             </div>
-        </div>
 
-    </main>
-
-    <div id="msgModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[100] backdrop-blur-sm px-4">
-        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl transform scale-95 transition-transform duration-200 flex flex-col items-center text-center">
-            <div id="modalIcon" class="mb-4"></div>
-            <h3 id="modalTitle" class="text-xl font-bold text-gray-900 mb-2"></h3>
-            <p id="modalMsg" class="text-gray-600 text-sm mb-6"></p>
-            <button id="closeModalBtn" class="w-full bg-blue-600 text-white rounded-lg py-2.5 font-medium hover:bg-blue-700 transition-colors">ตกลง</button>
-        </div>
-    </div>
-
-    <script>
+            <!-- Container for Image Groups -->
+            <div id="imageGroupsContainer" class="flex flex-col gap-8 mt-4">
+        // 2. สร้าง Project -> ไปที่ APIs & Services -> Enable "Google Drive API"
+        // 3. ไปที่ Credentials -> Create Credentials -> OAuth client ID (Web application)
+        // 4. ใส่ Authorized JavaScript origins ให้ตรงกับ URL ที่คุณโฮสต์ไฟล์นี้ (เช่น https://your-github-name.github.io)
+        // 5. นำ Client ID มาใส่ด้านล่างนี้
+        const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com'; 
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        
         // ==========================================
         // CONFIGURATION (ผู้ใช้ต้องแก้ไขส่วนนี้)
         // ==========================================
@@ -175,6 +186,11 @@
         const reviewSection = document.getElementById('reviewSection');
         const imageGroupsContainer = document.getElementById('imageGroupsContainer');
         const uploadBtn = document.getElementById('uploadBtn');
+
+        const timeThresholdInput = document.getElementById('timeThresholdInput');
+        const hashThresholdInput = document.getElementById('hashThresholdInput');
+        const timeValDisplay = document.getElementById('timeValDisplay');
+        const hashValDisplay = document.getElementById('hashValDisplay');
 
         function showModal(title, message, type = 'info') {
             const modal = document.getElementById('msgModal');
@@ -389,10 +405,26 @@
             groupSimilarImages();
         });
 
+        // Event Listeners สำหรับอัปเดตค่าเมื่อขยับ Slider
+        timeThresholdInput.addEventListener('input', (e) => {
+            timeValDisplay.innerText = `${e.target.value} วินาที`;
+        });
+        timeThresholdInput.addEventListener('change', () => {
+            if (analyzedImages.length > 0) groupSimilarImages();
+        });
+
+        hashThresholdInput.addEventListener('input', (e) => {
+            hashValDisplay.innerText = `ระดับ ${e.target.value}`;
+        });
+        hashThresholdInput.addEventListener('change', () => {
+            if (analyzedImages.length > 0) groupSimilarImages();
+        });
+
         function groupSimilarImages() {
             imageGroups = [];
-            const TIME_THRESHOLD = 5000; // ห่างกันไม่เกิน 5 วินาที
-            const HASH_THRESHOLD = 12; // Hamming distance (0-64) ต่ำกว่านี้ถือว่าคล้ายมาก
+            // ดึงค่าจาก Slider (แทนที่ค่าคงที่เดิม)
+            const TIME_THRESHOLD = parseInt(timeThresholdInput.value) * 1000; 
+            const HASH_THRESHOLD = parseInt(hashThresholdInput.value); 
 
             let currentGroup = [];
             
