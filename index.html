@@ -144,21 +144,24 @@
 
             <!-- Container for Image Groups -->
             <div id="imageGroupsContainer" class="flex flex-col gap-8 mt-4">
-        // 2. สร้าง Project -> ไปที่ APIs & Services -> Enable "Google Drive API"
-        // 3. ไปที่ Credentials -> Create Credentials -> OAuth client ID (Web application)
-        // 4. ใส่ Authorized JavaScript origins ให้ตรงกับ URL ที่คุณโฮสต์ไฟล์นี้ (เช่น https://your-github-name.github.io)
-        // 5. นำ Client ID มาใส่ด้านล่างนี้
-        const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com'; 
-        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-        
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Alert (หน้าต่างแจ้งเตือน) -->
+    <div id="msgModal" class="fixed inset-0 bg-black/40 z-[100] hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl transform scale-95 transition-all duration-200 flex flex-col items-center text-center gap-4">
+            <div id="modalIcon"></div>
+            <h3 id="modalTitle" class="text-xl font-bold text-gray-800"></h3>
+            <p id="modalMsg" class="text-sm text-gray-600 mb-2"></p>
+            <button id="closeModalBtn" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 w-full transition-colors">ตกลง</button>
+        </div>
+    </div>
+
+    <script>
         // ==========================================
-        // CONFIGURATION (ผู้ใช้ต้องแก้ไขส่วนนี้)
+        // CONFIGURATION
         // ==========================================
-        // 1. ไปที่ Google Cloud Console (https://console.cloud.google.com/)
-        // 2. สร้าง Project -> ไปที่ APIs & Services -> Enable "Google Drive API"
-        // 3. ไปที่ Credentials -> Create Credentials -> OAuth client ID (Web application)
-        // 4. ใส่ Authorized JavaScript origins ให้ตรงกับ URL ที่คุณโฮสต์ไฟล์นี้ (เช่น https://your-github-name.github.io)
-        // 5. นำ Client ID มาใส่ด้านล่างนี้
         const GOOGLE_CLIENT_ID = '772252636650-mb3gr5lcrhpkohfonti3o3qil42v1vd5.apps.googleusercontent.com'; 
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
         
