@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Image Sorter & Uploader</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Identity Services & API -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    
+    <!-- Exifr for extracting EXIF metadata quickly -->
+    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="text-gray-800 min-h-screen flex flex-col">
+
+    <nav class="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center gap-2">
+            <i class="ph-fill ph-images text-3xl text-blue-600"></i>
+            <h1 class="text-xl font-bold">Smart Image Sorter</h1>
+        </div>
+        <div>
+            <button id="authBtn" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 flex items-center gap-2 transition-all font-medium">
+                <i class="ph ph-google-logo text-xl"></i>
+                <span id="authText">ลงชื่อเข้าใช้ด้วย Google</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-6xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-6">
+        
+        <!-- Setup Section -->
+        <div id="setupSection" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-5">
+            <h2 class="text-lg font-semibold border-b pb-2">1. ตั้งค่าการอัปโหลด</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Target Folder ID (โฟลเดอร์หลัก)</label>
+                    <input type="text" id="targetFolderId" value="1hhmDFFhvV25uWyz3YIsOgoUrS9yYItTX" readonly class="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-500 cursor-not-allowed">
+                    <p class="text-xs text-gray-500 mt-1">ตั้งค่าไว้แล้วตามที่คุณระบุ</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อโฟลเดอร์ย่อย (กิจกรรม)</label>
+                    <input type="text" id="subFolderName" placeholder="เช่น กีฬาสี 2567" class="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer relative" id="dropZone">
+                <input type="file" id="fileInput" multiple accept="image/jpeg, image/png, image/webp" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <i class="ph ph-upload-simple text-4xl text-gray-400 mb-2"></i>
+                <h3 class="text-base font-medium text-gray-700">ลากไฟล์ภาพมาวาง หรือคลิกเพื่อเลือกไฟล์</h3>
+                <p class="text-sm text-gray-500 mt-1">รองรับ JPEG, PNG (ประมวลผลสูงสุด 500 ภาพเพื่อป้องกันเครื่องค้าง)</p>
+                <div id="selectedCount" class="mt-3 font-semibold text-blue-600 hidden">เลือกภาพแล้ว: 0 ไฟล์</div>
+            </div>
+
+            <div class="flex justify-end mt-2">
+                <button id="startProcessBtn" disabled class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                    <i class="ph ph-magnifying-glass"></i> เริ่มคัดกรองภาพ
+                </button>
+            </div>
+        </div>
+
+        <div id="progressSection" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4 text-center">
+            <h2 class="text-lg font-semibold" id="progressTitle">กำลังวิเคราะห์ภาพ...</h2>
+            <p class="text-sm text-gray-500" id="progressDesc">ระบบกำลังอ่านค่าและเปรียบเทียบความคล้ายของภาพ</p>
+            
+            <div class="w-full bg-gray-200 rounded-full h-4 mb-2 overflow-hidden">
+                <div id="progressBar" class="bg-blue-600 h-4 rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+            </div>
+            <div class="text-sm font-medium text-gray-700" id="progressText">0 / 0 ภาพ</div>
+        </div>
+
+        <div id="reviewSection" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
+                <div>
+                    <h2 class="text-xl font-bold">2. รีวิวผลการคัดกรอง</h2>
+                    <p class="text-sm text-gray-600 mt-1" id="reviewSummary">พบกลุ่มภาพซ้ำ 0 กลุ่ม จากทั้งหมด 0 ภาพ</p>
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <button id="uploadBtn" class="w-full sm:w-auto bg-green-600 text-white px-6 py-2 rounded-lg font-medium shadow hover:bg-green-700 flex items-center justify-center gap-2 transition-colors">
+                        <i class="ph ph-cloud-arrow-up text-lg"></i> อัปโหลดภาพที่เลือก
+                    </button>
+                </div>
+            </div>
+
+            <!-- Container for Image Groups -->
+            <div id="imageGroupsContainer" class="flex flex-col gap-8 mt-2">
+                <!-- Groups will be injected here via JS -->
+            </div>
+        </div>
+
+    </main>
+
+    <div id="msgModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[100] backdrop-blur-sm px-4">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl transform scale-95 transition-transform duration-200 flex flex-col items-center text-center">
+            <div id="modalIcon" class="mb-4"></div>
+            <h3 id="modalTitle" class="text-xl font-bold text-gray-900 mb-2"></h3>
+            <p id="modalMsg" class="text-gray-600 text-sm mb-6"></p>
+            <button id="closeModalBtn" class="w-full bg-blue-600 text-white rounded-lg py-2.5 font-medium hover:bg-blue-700 transition-colors">ตกลง</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURATION (ผู้ใช้ต้องแก้ไขส่วนนี้)
+        // ==========================================
+        // 1. ไปที่ Google Cloud Console (https://console.cloud.google.com/)
+        // 2. สร้าง Project -> ไปที่ APIs & Services -> Enable "Google Drive API"
+        // 3. ไปที่ Credentials -> Create Credentials -> OAuth client ID (Web application)
+        // 4. ใส่ Authorized JavaScript origins ให้ตรงกับ URL ที่คุณโฮสต์ไฟล์นี้ (เช่น https://your-github-name.github.io)
+        // 5. นำ Client ID มาใส่ด้านล่างนี้
+        const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com'; 
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        
+        // ==========================================
+        // STATE VARIABLES
+        // ==========================================
+        let tokenClient;
+        let accessToken = null;
+        
+        let selectedFiles = []; // raw file objects
+        let analyzedImages = []; // { id, file, hash, time, score, objectUrl }
+        let imageGroups = []; // Array of arrays of analyzedImages
+        let finalSelection = new Set(); // Set of selected file IDs
+        
+        // UI Elements
+        const authBtn = document.getElementById('authBtn');
+        const authText = document.getElementById('authText');
+        const fileInput = document.getElementById('fileInput');
+        const selectedCount = document.getElementById('selectedCount');
+        const startProcessBtn = document.getElementById('startProcessBtn');
+        const subFolderNameInput = document.getElementById('subFolderName');
+        
+        const setupSection = document.getElementById('setupSection');
+        const progressSection = document.getElementById('progressSection');
+        const reviewSection = document.getElementById('reviewSection');
+        const imageGroupsContainer = document.getElementById('imageGroupsContainer');
+        const uploadBtn = document.getElementById('uploadBtn');
+
+        function showModal(title, message, type = 'info') {
+            const modal = document.getElementById('msgModal');
+            const icon = document.getElementById('modalIcon');
+            
+            let iconHtml = '';
+            if (type === 'error') {
+                iconHtml = '<div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-500"><i class="ph-fill ph-warning-circle text-3xl"></i></div>';
+            } else if (type === 'success') {
+                iconHtml = '<div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-500"><i class="ph-fill ph-check-circle text-3xl"></i></div>';
+            } else {
+                iconHtml = '<div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-500"><i class="ph-fill ph-info text-3xl"></i></div>';
+            }
+            
+            icon.innerHTML = iconHtml;
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMsg').innerText = message;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.querySelector('div').classList.remove('scale-95');
+            modal.querySelector('div').classList.add('scale-100');
+        }
+
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            const modal = document.getElementById('msgModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        });
+
+        function initGoogleAuth() {
+            if (GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com') {
+                console.warn("Please set your Google Client ID in the code.");
+            }
+
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        accessToken = tokenResponse.access_token;
+                        authText.innerText = 'เชื่อมต่อ Drive แล้ว';
+                        authBtn.classList.replace('text-gray-700', 'text-green-700');
+                        authBtn.classList.replace('bg-white', 'bg-green-50');
+                        authBtn.classList.add('border-green-300');
+                        showModal('เข้าสู่ระบบสำเร็จ', 'เชื่อมต่อกับ Google Drive เรียบร้อยแล้ว', 'success');
+                    }
+                },
+            });
+        }
+
+        authBtn.addEventListener('click', () => {
+            if (GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com') {
+                showModal('ตั้งค่าไม่สมบูรณ์', 'นักพัฒนาจำเป็นต้องระบุ GOOGLE_CLIENT_ID ใน Source Code ก่อนจึงจะใช้งานฟังก์ชันนี้ได้', 'error');
+                return;
+            }
+            if (!accessToken) {
+                tokenClient.requestAccessToken();
+            } else {
+                showModal('สถานะ', 'คุณเข้าสู่ระบบอยู่แล้ว');
+            }
+        });
+
+        window.onload = function () {
+            if(window.google) initGoogleAuth();
+        };
+
+        fileInput.addEventListener('change', (e) => {
+            selectedFiles = Array.from(e.target.files);
+            if (selectedFiles.length > 0) {
+                selectedCount.innerText = `เลือกภาพแล้ว: ${selectedFiles.length} ไฟล์`;
+                selectedCount.classList.remove('hidden');
+                startProcessBtn.disabled = false;
+            } else {
+                selectedCount.classList.add('hidden');
+                startProcessBtn.disabled = true;
+            }
+        });
+
+        
+        // 1. Difference Hash (dHash) - แปลงภาพเป็นขาวดำย่อส่วนเพื่อหารหัสโครงสร้างภาพ
+        async function getDHash(img) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 9;
+            canvas.height = 8;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 9, 8);
+            
+            const imageData = ctx.getImageData(0, 0, 9, 8);
+            const data = imageData.data;
+            
+            let hash = '';
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const idx1 = (y * 9 + x) * 4;
+                    const idx2 = (y * 9 + (x + 1)) * 4;
+                    
+                    // แปลงเป็น Grayscale (Luminance)
+                    const g1 = data[idx1] * 0.299 + data[idx1+1] * 0.587 + data[idx1+2] * 0.114;
+                    const g2 = data[idx2] * 0.299 + data[idx2+1] * 0.587 + data[idx2+2] * 0.114;
+                    
+                    hash += (g1 < g2 ? '1' : '0');
+                }
+            }
+            return hash;
+        }
+
+        // 2. คำนวณความคมชัดแบบง่าย (Laplacian Variance Approximation)
+        function estimateSharpness(img) {
+            const canvas = document.createElement('canvas');
+            // ย่อให้เล็กลงเพื่อความเร็ว แต่ยังพอเห็นความต่างของขอบ
+            canvas.width = 100;
+            const scale = 100 / img.width;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            let sum = 0;
+            let sumSq = 0;
+            let count = 0;
+            
+            // หาค่าเฉลี่ยสีเทาและความแปรปรวน
+            for(let i = 0; i < data.length; i += 4) {
+                const gray = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
+                sum += gray;
+                sumSq += gray * gray;
+                count++;
+            }
+            
+            const mean = sum / count;
+            const variance = (sumSq / count) - (mean * mean);
+            // Variance สูงมักแปลว่ามี Detail/Contrast (คมชัดกว่า) ในภาพกลุ่มเดียวกัน
+            return variance; 
+        }
+
+        // หาความต่างของ Hash
+        function hammingDistance(h1, h2) {
+            let dist = 0;
+            for(let i = 0; i < 64; i++) {
+                if(h1[i] !== h2[i]) dist++;
+            }
+            return dist;
+        }
+
+        startProcessBtn.addEventListener('click', async () => {
+            if (!subFolderNameInput.value.trim()) {
+                showModal('ข้อมูลไม่ครบ', 'กรุณาตั้งชื่อโฟลเดอร์ย่อยสำหรับกิจกรรมนี้ด้วยครับ', 'error');
+                return;
+            }
+
+            setupSection.classList.add('hidden');
+            progressSection.classList.remove('hidden');
+            
+            analyzedImages = [];
+            
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                
+                // Update UI
+                progressBar.style.width = `${((i + 1) / selectedFiles.length) * 100}%`;
+                progressText.innerText = `${i + 1} / ${selectedFiles.length} ภาพ`;
+                
+                try {
+                    // Extract Date
+                    let timestamp = file.lastModified; 
+                    try {
+                        const exif = await exifr.parse(file, ['DateTimeOriginal']);
+                        if (exif && exif.DateTimeOriginal) {
+                            timestamp = new Date(exif.DateTimeOriginal).getTime();
+                        }
+                    } catch (e) {
+                        // ignore exif error, fallback to file modified
+                    }
+
+                    // Load Image for Canvas
+                    const objectUrl = URL.createObjectURL(file);
+                    const img = await new Promise((resolve, reject) => {
+                        const i = new Image();
+                        i.onload = () => resolve(i);
+                        i.onerror = reject;
+                        i.src = objectUrl;
+                    });
+
+                    const hash = await getDHash(img);
+                    const score = estimateSharpness(img);
+
+                    analyzedImages.push({
+                        id: 'img_' + i + '_' + Date.now(),
+                        file: file,
+                        hash: hash,
+                        time: timestamp,
+                        score: score,
+                        objectUrl: objectUrl
+                    });
+
+                } catch (err) {
+                    console.error("Error processing file", file.name, err);
+                }
+
+                // Yield to main thread to prevent UI freezing
+                await new Promise(r => setTimeout(r, 10));
+            }
+
+            // เรียงลำดับตามเวลาถ่ายก่อน
+            analyzedImages.sort((a, b) => a.time - b.time);
+            groupSimilarImages();
+        });
+
+        function groupSimilarImages() {
+            imageGroups = [];
+            const TIME_THRESHOLD = 5000; // ห่างกันไม่เกิน 5 วินาที
+            const HASH_THRESHOLD = 12; // Hamming distance (0-64) ต่ำกว่านี้ถือว่าคล้ายมาก
+
+            let currentGroup = [];
+            
+            for (let i = 0; i < analyzedImages.length; i++) {
+                const img = analyzedImages[i];
+                
+                if (currentGroup.length === 0) {
+                    currentGroup.push(img);
+                } else {
+                    const lastImg = currentGroup[currentGroup.length - 1];
+                    const timeDiff = Math.abs(img.time - lastImg.time);
+                    const hDist = hammingDistance(img.hash, lastImg.hash);
+                    
+                    // ถ่ายติดๆกัน และมุมคล้ายกัน
+                    if (timeDiff <= TIME_THRESHOLD && hDist <= HASH_THRESHOLD) {
+                        currentGroup.push(img);
+                    } else {
+                        // ไม่เหมือนแล้ว ดันกลุ่มเก่าเก็บ แล้วสร้างกลุ่มใหม่
+                        imageGroups.push([...currentGroup]);
+                        currentGroup = [img];
+                    }
+                }
+            }
+            if (currentGroup.length > 0) {
+                imageGroups.push(currentGroup);
+            }
+
+            renderReviewSection();
+        }
+
+        function renderReviewSection() {
+            progressSection.classList.add('hidden');
+            reviewSection.classList.remove('hidden');
+            
+            document.getElementById('reviewSummary').innerText = `จัดกลุ่มภาพได้ ${imageGroups.length} กลุ่ม (จากทั้งหมด ${analyzedImages.length} ภาพ)`;
+            imageGroupsContainer.innerHTML = '';
+            finalSelection.clear();
+
+            imageGroups.forEach((group, groupIdx) => {
+                // เลือกรูปที่ดีที่สุดในกลุ่ม (คะแนนความคมชัดสูงสุด)
+                let bestImg = group[0];
+                group.forEach(img => {
+                    if (img.score > bestImg.score) bestImg = img;
+                });
+                
+                // Add the best image to final selection by default
+                finalSelection.add(bestImg.id);
+
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'bg-gray-50 p-4 rounded-xl border border-gray-200';
+                
+                const groupHeader = document.createElement('div');
+                groupHeader.className = 'flex justify-between items-center mb-3';
+                groupHeader.innerHTML = `<h3 class="font-semibold text-gray-700">กลุ่มที่ ${groupIdx + 1} <span class="text-xs font-normal bg-gray-200 px-2 py-1 rounded text-gray-600 ml-2">${group.length} ภาพ</span></h3>`;
+                groupDiv.appendChild(groupHeader);
+
+                const imagesGrid = document.createElement('div');
+                imagesGrid.className = 'flex gap-4 overflow-x-auto pb-2 hide-scrollbar';
+
+                group.forEach(img => {
+                    const isBest = img.id === bestImg.id;
+                    
+                    const imgCard = document.createElement('div');
+                    imgCard.className = `relative flex-shrink-0 cursor-pointer rounded-lg overflow-hidden border-2 transition-all w-32 h-32 sm:w-40 sm:h-40 ${isBest ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : 'border-transparent opacity-60 hover:opacity-100'}`;
+                    imgCard.onclick = () => toggleSelection(img.id, imgCard);
+                    imgCard.dataset.id = img.id;
+
+                    imgCard.innerHTML = `
+                        <img src="${img.objectUrl}" class="w-full h-full object-cover">
+                        <div class="absolute top-2 right-2 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center transition-colors ${isBest ? 'bg-blue-500 text-white' : 'bg-black/30 text-transparent'} check-icon">
+                            <i class="ph-bold ph-check text-sm"></i>
+                        </div>
+                        ${isBest ? '<div class="absolute bottom-0 left-0 right-0 bg-blue-500/80 text-white text-[10px] text-center py-1 font-medium">คมชัดที่สุด แนะนำ</div>' : ''}
+                    `;
+                    imagesGrid.appendChild(imgCard);
+                });
+
+                groupDiv.appendChild(imagesGrid);
+                imageGroupsContainer.appendChild(groupDiv);
+            });
+            updateUploadBtnText();
+        }
+
+        function toggleSelection(id, cardElement) {
+            const checkIcon = cardElement.querySelector('.check-icon');
+            
+            if (finalSelection.has(id)) {
+                finalSelection.delete(id);
+                cardElement.classList.remove('border-blue-500', 'shadow-md', 'ring-2', 'ring-blue-200');
+                cardElement.classList.add('border-transparent', 'opacity-60');
+                checkIcon.classList.remove('bg-blue-500', 'text-white');
+                checkIcon.classList.add('bg-black/30', 'text-transparent');
+            } else {
+                finalSelection.add(id);
+                cardElement.classList.remove('border-transparent', 'opacity-60');
+                cardElement.classList.add('border-blue-500', 'shadow-md', 'ring-2', 'ring-blue-200');
+                checkIcon.classList.remove('bg-black/30', 'text-transparent');
+                checkIcon.classList.add('bg-blue-500', 'text-white');
+            }
+            updateUploadBtnText();
+        }
+
+        function updateUploadBtnText() {
+            uploadBtn.innerHTML = `<i class="ph ph-cloud-arrow-up text-lg"></i> อัปโหลด ${finalSelection.size} ภาพ`;
+        }
+
+        uploadBtn.addEventListener('click', async () => {
+            if (!accessToken) {
+                showModal('ไม่ได้ล็อกอิน', 'กรุณาลงชื่อเข้าใช้ Google Drive ด้านบนก่อนทำการอัปโหลด', 'error');
+                return;
+            }
+            
+            if (finalSelection.size === 0) {
+                showModal('ไม่มีภาพ', 'กรุณาเลือกอย่างน้อย 1 ภาพเพื่ออัปโหลด', 'warning');
+                return;
+            }
+
+            const targetFolderId = document.getElementById('targetFolderId').value;
+            const subFolderName = document.getElementById('subFolderName').value.trim();
+            
+            // Show Uploading State
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = `<div class="loader w-4 h-4 border-2 border-t-white border-white/30"></div> กำลังสร้างโฟลเดอร์...`;
+
+            try {
+                // 1. Create Subfolder
+                const folderMetadata = {
+                    name: subFolderName,
+                    mimeType: 'application/vnd.google-apps.folder',
+                    parents: [targetFolderId]
+                };
+
+                let response = await fetch('https://www.googleapis.com/drive/v3/files', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(folderMetadata)
+                });
+                
+                if (!response.ok) throw new Error("ไม่สามารถสร้างโฟลเดอร์ได้ ตรวจสอบ Folder ID หรือสิทธิ์การใช้งาน");
+                
+                const folder = await response.json();
+                const newFolderId = folder.id;
+
+                // 2. Upload Files sequentially
+                const filesToUpload = analyzedImages.filter(img => finalSelection.has(img.id));
+                let uploadedCount = 0;
+
+                for (const imgData of filesToUpload) {
+                    uploadBtn.innerHTML = `<div class="loader w-4 h-4 border-2 border-t-white border-white/30"></div> อัปโหลด (${uploadedCount + 1}/${filesToUpload.length})`;
+                    
+                    const file = imgData.file;
+                    const metadata = {
+                        name: file.name,
+                        parents: [newFolderId]
+                    };
+
+                    const form = new FormData();
+                    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                    form.append('file', file);
+
+                    const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken
+                        },
+                        body: form
+                    });
+
+                    if (uploadRes.ok) {
+                        uploadedCount++;
+                    } else {
+                        console.error("Failed to upload", file.name);
+                    }
+                }
+
+                showModal('สำเร็จ!', `อัปโหลดรูปภาพทั้งหมด ${uploadedCount} ภาพไปยังโฟลเดอร์ "${subFolderName}" เรียบร้อยแล้ว`, 'success');
+                
+                // Reset UI
+                uploadBtn.innerHTML = `<i class="ph ph-check-circle text-lg"></i> อัปโหลดสำเร็จ`;
+                uploadBtn.classList.replace('bg-green-600', 'bg-gray-500');
+                
+            } catch (err) {
+                console.error(err);
+                showModal('เกิดข้อผิดพลาด', err.message, 'error');
+                uploadBtn.disabled = false;
+                updateUploadBtnText();
+            }
+        });
+
+    </script>
+</body>
+</html>
